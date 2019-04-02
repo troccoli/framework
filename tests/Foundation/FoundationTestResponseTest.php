@@ -11,6 +11,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\AssertionFailedError;
 use Illuminate\Foundation\Testing\TestResponse;
+use PHPUnit\Framework\ExpectationFailedException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FoundationTestResponseTest extends TestCase
@@ -143,12 +144,11 @@ class FoundationTestResponseTest extends TestCase
         $response->assertHeader('Location', '/bar');
     }
 
-    /**
-     * @expectedException \PHPUnit\Framework\ExpectationFailedException
-     * @expectedExceptionMessage Unexpected header [Location] is present on response.
-     */
     public function testAssertHeaderMissing()
     {
+        $this->expectException(ExpectationFailedException::class);
+        $this->expectExceptionMessage('Unexpected header [Location] is present on response.');
+
         $baseResponse = tap(new Response, function ($response) {
             $response->header('Location', '/foo');
         });
@@ -301,6 +301,74 @@ class FoundationTestResponseTest extends TestCase
         $response->assertJsonMissingExact(['id' => 20, 'foo' => 'bar']);
     }
 
+    public function testAssertJsonValidationErrors()
+    {
+        $data = [
+            'status' => 'ok',
+            'errors' => ['foo' => 'oops'],
+        ];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonValidationErrors('foo');
+    }
+
+    public function testAssertJsonValidationErrorsCustomErrorsName()
+    {
+        $data = [
+            'status' => 'ok',
+            'data' => ['foo' => 'oops'],
+        ];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonValidationErrors('foo', 'data');
+    }
+
+    public function testAssertJsonValidationErrorsCanFail()
+    {
+        $this->expectException(AssertionFailedError::class);
+
+        $data = [
+            'status' => 'ok',
+            'errors' => ['foo' => 'oops'],
+        ];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonValidationErrors('bar');
+    }
+
+    public function testAssertJsonValidationErrorsCanFailWhenThereAreNoErrors()
+    {
+        $this->expectException(AssertionFailedError::class);
+
+        $data = ['status' => 'ok'];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonValidationErrors('bar');
+    }
+
+    public function testAssertJsonValidationErrorsFailsWhenGivenAnEmptyArray()
+    {
+        $this->expectException(AssertionFailedError::class);
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode(['errors' => ['foo' => 'oops']]))
+        );
+
+        $testResponse->assertJsonValidationErrors([]);
+    }
+
     public function testAssertJsonMissingValidationErrors()
     {
         $baseResponse = tap(new Response, function ($response) {
@@ -355,6 +423,55 @@ class FoundationTestResponseTest extends TestCase
         $response = TestResponse::fromBaseResponse($baseResponse);
 
         $response->assertJsonMissingValidationErrors('bar');
+    }
+
+    public function testAssertJsonMissingValidationErrorsWithoutArgument()
+    {
+        $data = ['status' => 'ok'];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonMissingValidationErrors();
+    }
+
+    public function testAssertJsonMissingValidationErrorsWithoutArgumentWhenErrorsIsEmpty()
+    {
+        $data = ['status' => 'ok', 'errors' => []];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonMissingValidationErrors();
+    }
+
+    public function testAssertJsonMissingValidationErrorsWithoutArgumentCanFail()
+    {
+        $this->expectException(AssertionFailedError::class);
+
+        $data = ['errors' => ['foo' => []]];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonMissingValidationErrors();
+    }
+
+    public function testAssertJsonMissingValidationErrorsCustomErrorsName()
+    {
+        $data = [
+            'status' => 'ok',
+            'data' => ['foo' => 'oops'],
+        ];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonMissingValidationErrors('bar', 'data');
     }
 
     public function testMacroable()

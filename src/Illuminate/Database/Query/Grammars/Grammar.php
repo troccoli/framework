@@ -298,30 +298,6 @@ class Grammar extends BaseGrammar
     }
 
     /**
-     * Compile a where in sub-select clause.
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereInSub(Builder $query, $where)
-    {
-        return $this->wrap($where['column']).' in ('.$this->compileSelect($where['query']).')';
-    }
-
-    /**
-     * Compile a where not in sub-select clause.
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query
-     * @param  array  $where
-     * @return string
-     */
-    protected function whereNotInSub(Builder $query, $where)
-    {
-        return $this->wrap($where['column']).' not in ('.$this->compileSelect($where['query']).')';
-    }
-
-    /**
      * Compile a "where in raw" clause.
      *
      * For safety, whereIntegerInRaw ensures this method is only used with integer values.
@@ -537,6 +513,24 @@ class Grammar extends BaseGrammar
         $values = $this->parameterize($where['values']);
 
         return '('.$columns.') '.$where['operator'].' ('.$values.')';
+    }
+
+    /**
+     * Compile a "where JSON boolean" clause.
+     *
+     * @param  \Illuminate\Database\Query\Builder  $query
+     * @param  array  $where
+     * @return string
+     */
+    protected function whereJsonBoolean(Builder $query, $where)
+    {
+        $column = $this->wrapJsonBooleanSelector($where['column']);
+
+        $value = $this->wrapJsonBooleanValue(
+            $this->parameter($where['value'])
+        );
+
+        return $column.' '.$where['operator'].' '.$value;
     }
 
     /**
@@ -1051,6 +1045,28 @@ class Grammar extends BaseGrammar
     protected function wrapJsonSelector($value)
     {
         throw new RuntimeException('This database engine does not support JSON operations.');
+    }
+
+    /**
+     * Wrap the given JSON selector for boolean values.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function wrapJsonBooleanSelector($value)
+    {
+        return $this->wrapJsonSelector($value);
+    }
+
+    /**
+     * Wrap the given JSON boolean value.
+     *
+     * @param  string  $value
+     * @return string
+     */
+    protected function wrapJsonBooleanValue($value)
+    {
+        return $value;
     }
 
     /**

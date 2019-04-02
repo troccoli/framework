@@ -5,6 +5,7 @@ namespace Illuminate\Tests\Integration\Database;
 use Orchestra\Testbench\TestCase;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -25,24 +26,24 @@ class EloquentDeleteTest extends TestCase
         ]);
     }
 
-    public function setUp()
+    protected function setUp(): void
     {
         parent::setUp();
 
-        Schema::create('posts', function ($table) {
+        Schema::create('posts', function (Blueprint $table) {
             $table->increments('id');
             $table->string('title')->nullable();
             $table->timestamps();
         });
 
-        Schema::create('comments', function ($table) {
+        Schema::create('comments', function (Blueprint $table) {
             $table->increments('id');
             $table->string('body')->nullable();
             $table->integer('post_id');
             $table->timestamps();
         });
 
-        Schema::create('roles', function ($table) {
+        Schema::create('roles', function (Blueprint $table) {
             $table->increments('id');
             $table->timestamps();
             $table->softDeletes();

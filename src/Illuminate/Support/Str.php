@@ -444,7 +444,7 @@ class Str
         $title = str_replace('@', $separator.'at'.$separator, $title);
 
         // Remove all characters that are not the separator, letters, numbers, or whitespace.
-        $title = preg_replace('![^'.preg_quote($separator).'\pL\pN\s]+!u', '', mb_strtolower($title));
+        $title = preg_replace('![^'.preg_quote($separator).'\pL\pN\s]+!u', '', static::lower($title));
 
         // Replace all separator characters and whitespace by a single separator
         $title = preg_replace('!['.preg_quote($separator).'\s]+!u', $separator, $title);
@@ -722,9 +722,17 @@ class Str
                     ['х', 'Х', 'щ', 'Щ', 'ъ', 'Ъ', 'ь', 'Ь'],
                     ['h', 'H', 'sht', 'SHT', 'a', 'А', 'y', 'Y'],
                 ],
+                'da' => [
+                    ['æ', 'ø', 'å', 'Æ', 'Ø', 'Å'],
+                    ['ae', 'oe', 'aa', 'Ae', 'Oe', 'Aa'],
+                ],
                 'de' => [
                     ['ä',  'ö',  'ü',  'Ä',  'Ö',  'Ü'],
                     ['ae', 'oe', 'ue', 'AE', 'OE', 'UE'],
+                ],
+                'ro' => [
+                    ['ă', 'â', 'î', 'ș', 'ț', 'Ă', 'Â', 'Î', 'Ș', 'Ț'],
+                    ['a', 'a', 'i', 's', 't', 'A', 'A', 'I', 'S', 'T'],
                 ],
             ];
         }

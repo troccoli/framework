@@ -6,9 +6,11 @@ use DateTime;
 use stdClass;
 use Exception;
 use Mockery as m;
+use LogicException;
 use ReflectionClass;
 use DateTimeImmutable;
 use DateTimeInterface;
+use InvalidArgumentException;
 use Illuminate\Support\Carbon;
 use PHPUnit\Framework\TestCase;
 use Illuminate\Database\Connection;
@@ -24,19 +26,22 @@ use Illuminate\Database\ConnectionResolverInterface;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection as BaseCollection;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Query\Builder as BaseBuilder;
+use Illuminate\Database\Eloquent\JsonEncodingException;
+use Illuminate\Database\Eloquent\MassAssignmentException;
 
 class DatabaseEloquentModelTest extends TestCase
 {
     use InteractsWithTime;
 
-    public function setUp()
+    protected function setUp(): void
     {
         parent::setUp();
 
         Carbon::setTestNow(Carbon::now());
     }
 
-    public function tearDown()
+    protected function tearDown(): void
     {
         parent::tearDown();
 
@@ -479,6 +484,22 @@ class DatabaseEloquentModelTest extends TestCase
         $this->assertNull($model->fromDateTime(null));
     }
 
+    public function testFromDateTimeMilliseconds()
+    {
+        if (version_compare(PHP_VERSION, '7.3.0-dev', '<')) {
+            $this->markTestSkipped('Due to https://bugs.php.net/bug.php?id=75577, proper "v" format support can only works since PHP 7.3.');
+        }
+
+        $model = $this->getMockBuilder('Illuminate\Tests\Database\EloquentDateModelStub')->setMethods(['getDateFormat'])->getMock();
+        $model->expects($this->any())->method('getDateFormat')->will($this->returnValue('Y-m-d H:s.vi'));
+        $model->setRawAttributes([
+            'created_at' => '2012-12-04 22:59.32130',
+        ]);
+
+        $this->assertInstanceOf(\Illuminate\Support\Carbon::class, $model->created_at);
+        $this->assertEquals('22:30:59.321000', $model->created_at->format('H:i:s.u'));
+    }
+
     public function testInsertProcess()
     {
         $model = $this->getMockBuilder(EloquentModelStub::class)->setMethods(['newModelQuery', 'updateTimestamps', 'refresh'])->getMock();
@@ -677,9 +698,10 @@ class DatabaseEloquentModelTest extends TestCase
         $conn = m::mock(Connection::class);
         $grammar = m::mock(Grammar::class);
         $processor = m::mock(Processor::class);
-        $conn->shouldReceive('getQueryGrammar')->once()->andReturn($grammar);
-        $conn->shouldReceive('getPostProcessor')->once()->andReturn($processor);
         EloquentModelStub::setConnectionResolver($resolver = m::mock(ConnectionResolverInterface::class));
+        $conn->shouldReceive('query')->andReturnUsing(function () use ($conn, $grammar, $processor) {
+            return new BaseBuilder($conn, $grammar, $processor);
+        });
         $resolver->shouldReceive('connection')->andReturn($conn);
         $model = new EloquentModelStub;
         $builder = $model->newQuery();
@@ -732,7 +754,7 @@ class DatabaseEloquentModelTest extends TestCase
         $model->setRelation('multi', new BaseCollection);
         $array = $model->toArray();
 
-        $this->assertInternalType('array', $array);
+        $this->assertIsArray($array);
         $this->assertEquals('foo', $array['name']);
         $this->assertEquals('baz', $array['names'][0]['bar']);
         $this->assertEquals('boom', $array['names'][1]['bam']);
@@ -962,12 +984,11 @@ class DatabaseEloquentModelTest extends TestCase
         $this->assertEquals('bar', $model->foo);
     }
 
-    /**
-     * @expectedException \Illuminate\Database\Eloquent\MassAssignmentException
-     * @expectedExceptionMessage name
-     */
     public function testGlobalGuarded()
     {
+        $this->expectException(MassAssignmentException::class);
+        $this->expectExceptionMessage('name');
+
         $model = new EloquentModelStub;
         $model->guard(['*']);
         $model->fill(['name' => 'foo', 'age' => 'bar', 'votes' => 'baz']);
@@ -1306,6 +1327,18 @@ class DatabaseEloquentModelTest extends TestCase
         EloquentModelStub::flushEventListeners();
     }
 
+    public function testThrowExceptionOnAttachingNotExistsModelObserverWithString()
+    {
+        $this->expectException(InvalidArgumentException::class);
+        EloquentModelStub::observe(NotExistClass::class);
+    }
+
+    public function testThrowExceptionOnAttachingNotExistsModelObserversThroughAnArray()
+    {
+        $this->expectException(InvalidArgumentException::class);
+        EloquentModelStub::observe([NotExistClass::class]);
+    }
+
     public function testModelObserversCanBeAttachedToModelsThroughCallingObserveMethodOnlyOnce()
     {
         EloquentModelStub::setEventDispatcher($events = m::mock(Dispatcher::class));
@@ -1323,6 +1356,37 @@ class DatabaseEloquentModelTest extends TestCase
         ]);
 
         EloquentModelStub::flushEventListeners();
+    }
+
+    public function testWithoutEventDispatcher()
+    {
+        EloquentModelSaveStub::setEventDispatcher($events = m::mock(Dispatcher::class));
+        $events->shouldReceive('listen')->once()->with('eloquent.creating: Illuminate\Tests\Database\EloquentModelSaveStub', EloquentTestObserverStub::class.'@creating');
+        $events->shouldReceive('listen')->once()->with('eloquent.saved: Illuminate\Tests\Database\EloquentModelSaveStub', EloquentTestObserverStub::class.'@saved');
+        $events->shouldNotReceive('until');
+        $events->shouldNotReceive('dispatch');
+        $events->shouldReceive('forget');
+        EloquentModelSaveStub::observe(EloquentTestObserverStub::class);
+
+        $model = EloquentModelSaveStub::withoutEvents(function () {
+            $model = new EloquentModelSaveStub;
+            $model->save();
+
+            return $model;
+        });
+
+        $model->withoutEvents(function () use ($model) {
+            $model->first_name = 'Taylor';
+            $model->save();
+        });
+
+        $events->shouldReceive('until')->once()->with('eloquent.saving: Illuminate\Tests\Database\EloquentModelSaveStub', $model);
+        $events->shouldReceive('dispatch')->once()->with('eloquent.saved: Illuminate\Tests\Database\EloquentModelSaveStub', $model);
+
+        $model->last_name = 'Otwell';
+        $model->save();
+
+        EloquentModelSaveStub::flushEventListeners();
     }
 
     public function testSetObservableEvents()
@@ -1369,12 +1433,11 @@ class DatabaseEloquentModelTest extends TestCase
         $this->assertNotContains('bar', $class->getObservableEvents());
     }
 
-    /**
-     * @expectedException \LogicException
-     * @expectedExceptionMessage Illuminate\Tests\Database\EloquentModelStub::incorrectRelationStub must return a relationship instance.
-     */
     public function testGetModelAttributeMethodThrowsExceptionIfNotRelation()
     {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Illuminate\Tests\Database\EloquentModelStub::incorrectRelationStub must return a relationship instance.');
+
         $model = new EloquentModelStub;
         $model->incorrectRelationStub;
     }
@@ -1446,13 +1509,13 @@ class DatabaseEloquentModelTest extends TestCase
 
     public function testIncrementOnExistingModelCallsQueryAndSetsAttribute()
     {
-        $model = m::mock(EloquentModelStub::class.'[newModelQuery]');
+        $model = m::mock(EloquentModelStub::class.'[newQueryWithoutRelationships]');
         $model->exists = true;
         $model->id = 1;
         $model->syncOriginalAttribute('id');
         $model->foo = 2;
 
-        $model->shouldReceive('newModelQuery')->andReturn($query = m::mock(stdClass::class));
+        $model->shouldReceive('newQueryWithoutRelationships')->andReturn($query = m::mock(stdClass::class));
         $query->shouldReceive('where')->andReturn($query);
         $query->shouldReceive('increment');
 
@@ -1515,14 +1578,14 @@ class DatabaseEloquentModelTest extends TestCase
         $model->datetimeAttribute = '1969-07-20 22:56:00';
         $model->timestampAttribute = '1969-07-20 22:56:00';
 
-        $this->assertInternalType('int', $model->intAttribute);
-        $this->assertInternalType('float', $model->floatAttribute);
-        $this->assertInternalType('string', $model->stringAttribute);
-        $this->assertInternalType('boolean', $model->boolAttribute);
-        $this->assertInternalType('boolean', $model->booleanAttribute);
-        $this->assertInternalType('object', $model->objectAttribute);
-        $this->assertInternalType('array', $model->arrayAttribute);
-        $this->assertInternalType('array', $model->jsonAttribute);
+        $this->assertIsInt($model->intAttribute);
+        $this->assertIsFloat($model->floatAttribute);
+        $this->assertIsString($model->stringAttribute);
+        $this->assertIsBool($model->boolAttribute);
+        $this->assertIsBool($model->booleanAttribute);
+        $this->assertIsObject($model->objectAttribute);
+        $this->assertIsArray($model->arrayAttribute);
+        $this->assertIsArray($model->jsonAttribute);
         $this->assertTrue($model->boolAttribute);
         $this->assertFalse($model->booleanAttribute);
         $this->assertEquals($obj, $model->objectAttribute);
@@ -1536,14 +1599,15 @@ class DatabaseEloquentModelTest extends TestCase
         $this->assertEquals(-14173440, $model->timestampAttribute);
 
         $arr = $model->toArray();
-        $this->assertInternalType('int', $arr['intAttribute']);
-        $this->assertInternalType('float', $arr['floatAttribute']);
-        $this->assertInternalType('string', $arr['stringAttribute']);
-        $this->assertInternalType('boolean', $arr['boolAttribute']);
-        $this->assertInternalType('boolean', $arr['booleanAttribute']);
-        $this->assertInternalType('object', $arr['objectAttribute']);
-        $this->assertInternalType('array', $arr['arrayAttribute']);
-        $this->assertInternalType('array', $arr['jsonAttribute']);
+
+        $this->assertIsInt($arr['intAttribute']);
+        $this->assertIsFloat($arr['floatAttribute']);
+        $this->assertIsString($arr['stringAttribute']);
+        $this->assertIsBool($arr['boolAttribute']);
+        $this->assertIsBool($arr['booleanAttribute']);
+        $this->assertIsObject($arr['objectAttribute']);
+        $this->assertIsArray($arr['arrayAttribute']);
+        $this->assertIsArray($arr['jsonAttribute']);
         $this->assertTrue($arr['boolAttribute']);
         $this->assertFalse($arr['booleanAttribute']);
         $this->assertEquals($obj, $arr['objectAttribute']);
@@ -1622,12 +1686,11 @@ class DatabaseEloquentModelTest extends TestCase
         $this->assertNull($array['timestampAttribute']);
     }
 
-    /**
-     * @expectedException \Illuminate\Database\Eloquent\JsonEncodingException
-     * @expectedExceptionMessage Unable to encode attribute [objectAttribute] for model [Illuminate\Tests\Database\EloquentModelCastingStub] to JSON: Malformed UTF-8 characters, possibly incorrectly encoded.
-     */
     public function testModelAttributeCastingFailsOnUnencodableData()
     {
+        $this->expectException(JsonEncodingException::class);
+        $this->expectExceptionMessage('Unable to encode attribute [objectAttribute] for model [Illuminate\Tests\Database\EloquentModelCastingStub] to JSON: Malformed UTF-8 characters, possibly incorrectly encoded.');
+
         $model = new EloquentModelCastingStub;
         $model->objectAttribute = ['foo' => "b\xF8r"];
         $obj = new stdClass;
@@ -1814,9 +1877,12 @@ class DatabaseEloquentModelTest extends TestCase
     protected function addMockConnection($model)
     {
         $model->setConnectionResolver($resolver = m::mock(ConnectionResolverInterface::class));
-        $resolver->shouldReceive('connection')->andReturn(m::mock(Connection::class));
-        $model->getConnection()->shouldReceive('getQueryGrammar')->andReturn(m::mock(Grammar::class));
-        $model->getConnection()->shouldReceive('getPostProcessor')->andReturn(m::mock(Processor::class));
+        $resolver->shouldReceive('connection')->andReturn($connection = m::mock(Connection::class));
+        $connection->shouldReceive('getQueryGrammar')->andReturn($grammar = m::mock(Grammar::class));
+        $connection->shouldReceive('getPostProcessor')->andReturn($processor = m::mock(Processor::class));
+        $connection->shouldReceive('query')->andReturnUsing(function () use ($connection, $grammar, $processor) {
+            return new BaseBuilder($connection, $grammar, $processor);
+        });
     }
 }
 
@@ -1975,7 +2041,13 @@ class EloquentModelSaveStub extends Model
 
     public function save(array $options = [])
     {
+        if ($this->fireModelEvent('saving') === false) {
+            return false;
+        }
+
         $_SERVER['__eloquent.saved'] = true;
+
+        $this->fireModelEvent('saved', false);
     }
 
     public function setIncrementing($value)
@@ -1986,9 +2058,12 @@ class EloquentModelSaveStub extends Model
     public function getConnection()
     {
         $mock = m::mock(Connection::class);
-        $mock->shouldReceive('getQueryGrammar')->andReturn(m::mock(Grammar::class));
-        $mock->shouldReceive('getPostProcessor')->andReturn(m::mock(Processor::class));
+        $mock->shouldReceive('getQueryGrammar')->andReturn($grammar = m::mock(Grammar::class));
+        $mock->shouldReceive('getPostProcessor')->andReturn($processor = m::mock(Processor::class));
         $mock->shouldReceive('getName')->andReturn('name');
+        $mock->shouldReceive('query')->andReturnUsing(function () use ($mock, $grammar, $processor) {
+            return new BaseBuilder($mock, $grammar, $processor);
+        });
 
         return $mock;
     }

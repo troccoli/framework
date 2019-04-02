@@ -3,6 +3,7 @@
 namespace Illuminate\Support;
 
 use Illuminate\Console\Application as Artisan;
+use Illuminate\Contracts\Support\DeferrableProvider;
 
 abstract class ServiceProvider
 {
@@ -12,13 +13,6 @@ abstract class ServiceProvider
      * @var \Illuminate\Contracts\Foundation\Application
      */
     protected $app;
-
-    /**
-     * Indicates if loading of the provider is deferred.
-     *
-     * @var bool
-     */
-    protected $defer = false;
 
     /**
      * The paths that should be published.
@@ -43,6 +37,16 @@ abstract class ServiceProvider
     public function __construct($app)
     {
         $this->app = $app;
+    }
+
+    /**
+     * Register any application services.
+     *
+     * @return void
+     */
+    public function register()
+    {
+        //
     }
 
     /**
@@ -297,6 +301,6 @@ abstract class ServiceProvider
      */
     public function isDeferred()
     {
-        return $this->defer;
+        return $this instanceof DeferrableProvider;
     }
 }

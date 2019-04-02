@@ -11,6 +11,7 @@ use ArrayIterator;
 use CachingIterator;
 use ReflectionClass;
 use JsonSerializable;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
@@ -306,6 +307,31 @@ class SupportCollectionTest extends TestCase
         $this->assertCount(2, $c);
     }
 
+    public function testCountableByWithoutPredicate()
+    {
+        $c = new Collection(['foo', 'foo', 'foo', 'bar', 'bar', 'foobar']);
+        $this->assertEquals(['foo' => 3, 'bar' => 2, 'foobar' => 1], $c->countBy()->all());
+
+        $c = new Collection([true, true, false, false, false]);
+        $this->assertEquals([true => 2, false => 3], $c->countBy()->all());
+
+        $c = new Collection([1, 5, 1, 5, 5, 1]);
+        $this->assertEquals([1 => 3, 5 => 3], $c->countBy()->all());
+    }
+
+    public function testCountableByWithPredicate()
+    {
+        $c = new Collection(['alice', 'aaron', 'bob', 'carla']);
+        $this->assertEquals(['a' => 2, 'b' => 1, 'c' => 1], $c->countBy(function ($name) {
+            return substr($name, 0, 1);
+        })->all());
+
+        $c = new Collection([1, 2, 3, 4, 5]);
+        $this->assertEquals([true => 2, false => 3], $c->countBy(function ($i) {
+            return $i % 2 === 0;
+        })->all());
+    }
+
     public function testIterable()
     {
         $c = new Collection(['foo']);
@@ -551,6 +577,15 @@ class SupportCollectionTest extends TestCase
             $c->whereBetween('v', [2, 4])->values()->all());
         $this->assertEquals([['v' => 1]], $c->whereBetween('v', [-1, 1])->all());
         $this->assertEquals([['v' => 3], ['v' => '3']], $c->whereBetween('v', [3, 3])->values()->all());
+    }
+
+    public function testWhereNotBetween()
+    {
+        $c = new Collection([['v' => 1], ['v' => 2], ['v' => 3], ['v' => '3'], ['v' => 4]]);
+
+        $this->assertEquals([['v' => 1]], $c->whereNotBetween('v', [2, 4])->values()->all());
+        $this->assertEquals([['v' => 2], ['v' => 3], ['v' => 3], ['v' => 4]], $c->whereNotBetween('v', [-1, 1])->values()->all());
+        $this->assertEquals([['v' => 1], ['v' => '2'], ['v' => '4']], $c->whereNotBetween('v', [3, 3])->values()->all());
     }
 
     public function testFlatten()
@@ -868,6 +903,19 @@ class SupportCollectionTest extends TestCase
         $this->assertEquals([1, 2, 3, 4, 5, 6], $data->collapse()->all());
     }
 
+    public function testJoin()
+    {
+        $this->assertEquals('a, b, c', (new Collection(['a', 'b', 'c']))->join(', '));
+
+        $this->assertEquals('a, b and c', (new Collection(['a', 'b', 'c']))->join(', ', ' and '));
+
+        $this->assertEquals('a and b', (new Collection(['a', 'b']))->join(', ', ' and '));
+
+        $this->assertEquals('a', (new Collection(['a']))->join(', ', ' and '));
+
+        $this->assertEquals('', (new Collection([]))->join(', ', ' and '));
+    }
+
     public function testCrossJoin()
     {
         // Cross join with an array
@@ -973,14 +1021,20 @@ class SupportCollectionTest extends TestCase
     {
         $data = new Collection(['b' => 'dayle', 'a' => 'taylor']);
 
-        $this->assertEquals(['a' => 'taylor', 'b' => 'dayle'], $data->sortKeys()->all());
+        $sortData = $data->sortKeys()->all();
+
+        $this->assertEquals(['a' => 'taylor', 'b' => 'dayle'], $sortData);
+        $this->assertEquals(['a', 'b'], array_keys($sortData));
     }
 
     public function testSortKeysDesc()
     {
         $data = new Collection(['a' => 'taylor', 'b' => 'dayle']);
 
-        $this->assertEquals(['b' => 'dayle', 'a' => 'taylor'], $data->sortKeys()->all());
+        $sortData = $data->sortKeysDesc()->all();
+
+        $this->assertEquals(['b' => 'dayle', 'a' => 'taylor'], $sortData);
+        $this->assertEquals(['b', 'a'], array_keys($sortData));
     }
 
     public function testReverse()
@@ -1145,7 +1199,7 @@ class SupportCollectionTest extends TestCase
         $data = new Collection([1, 2, 3, 4, 5, 6]);
 
         $random = $data->random();
-        $this->assertInternalType('integer', $random);
+        $this->assertIsInt($random);
         $this->assertContains($random, $data->all());
 
         $random = $data->random(0);
@@ -1463,7 +1517,7 @@ class SupportCollectionTest extends TestCase
 
         $this->assertInstanceOf(Collection::class, $groups);
         $this->assertEquals(['A' => [1], 'B' => [2, 4], 'C' => [3]], $groups->toArray());
-        $this->assertInternalType('array', $groups['A']);
+        $this->assertIsArray($groups['A']);
     }
 
     public function testMapToDictionaryWithNumericKeys()
@@ -1819,7 +1873,27 @@ class SupportCollectionTest extends TestCase
         $c = new Collection([1, 3, 5]);
 
         $this->assertTrue($c->contains(1));
+        $this->assertTrue($c->contains('1'));
         $this->assertFalse($c->contains(2));
+        $this->assertFalse($c->contains('2'));
+
+        $c = new Collection(['1']);
+        $this->assertTrue($c->contains('1'));
+        $this->assertTrue($c->contains(1));
+
+        $c = new Collection([null]);
+        $this->assertTrue($c->contains(false));
+        $this->assertTrue($c->contains(null));
+        $this->assertTrue($c->contains([]));
+        $this->assertTrue($c->contains(0));
+        $this->assertTrue($c->contains(''));
+
+        $c = new Collection([0]);
+        $this->assertTrue($c->contains(0));
+        $this->assertTrue($c->contains('0'));
+        $this->assertTrue($c->contains(false));
+        $this->assertTrue($c->contains(null));
+
         $this->assertTrue($c->contains(function ($value) {
             return $value < 5;
         }));
@@ -1895,8 +1969,10 @@ class SupportCollectionTest extends TestCase
         $c = new Collection([1, 3, 5, '02']);
 
         $this->assertTrue($c->containsStrict(1));
+        $this->assertFalse($c->containsStrict('1'));
         $this->assertFalse($c->containsStrict(2));
         $this->assertTrue($c->containsStrict('02'));
+        $this->assertFalse($c->containsStrict(true));
         $this->assertTrue($c->containsStrict(function ($value) {
             return $value < 5;
         }));
@@ -1904,10 +1980,23 @@ class SupportCollectionTest extends TestCase
             return $value > 5;
         }));
 
+        $c = new Collection([0]);
+        $this->assertTrue($c->containsStrict(0));
+        $this->assertFalse($c->containsStrict('0'));
+
+        $this->assertFalse($c->containsStrict(false));
+        $this->assertFalse($c->containsStrict(null));
+
+        $c = new Collection([1, null]);
+        $this->assertTrue($c->containsStrict(null));
+        $this->assertFalse($c->containsStrict(0));
+        $this->assertFalse($c->containsStrict(false));
+
         $c = new Collection([['v' => 1], ['v' => 3], ['v' => '04'], ['v' => 5]]);
 
         $this->assertTrue($c->containsStrict('v', 1));
         $this->assertFalse($c->containsStrict('v', 2));
+        $this->assertFalse($c->containsStrict('v', '1'));
         $this->assertFalse($c->containsStrict('v', 4));
         $this->assertTrue($c->containsStrict('v', '04'));
 
@@ -2011,11 +2100,32 @@ class SupportCollectionTest extends TestCase
         })->all());
     }
 
+    public function testRejectWithoutAnArgumentRemovesTruthyValues()
+    {
+        $collection1 = new Collection([
+            false,
+            true,
+            new Collection(),
+            0,
+        ]);
+        $this->assertSame([0 => false, 3 => 0], $collection1->reject()->all());
+
+        $collection2 = new Collection([
+            'a' => true,
+            'b' => true,
+            'c' => true,
+        ]);
+        $this->assertTrue(
+            $collection2->reject()->isEmpty()
+        );
+    }
+
     public function testSearchReturnsIndexOfFirstFoundItem()
     {
         $c = new Collection([1, 2, 3, 4, 5, 2, 5, 'foo' => 'bar']);
 
         $this->assertEquals(1, $c->search(2));
+        $this->assertEquals(1, $c->search('2'));
         $this->assertEquals('foo', $c->search('bar'));
         $this->assertEquals(4, $c->search(function ($value) {
             return $value > 4;
@@ -2023,6 +2133,18 @@ class SupportCollectionTest extends TestCase
         $this->assertEquals('foo', $c->search(function ($value) {
             return ! is_numeric($value);
         }));
+    }
+
+    public function testSearchInStrictMode()
+    {
+        $c = new Collection([false, 0, 1, [], '']);
+        $this->assertFalse($c->search('false', true));
+        $this->assertFalse($c->search('1', true));
+        $this->assertEquals(0, $c->search(false, true));
+        $this->assertEquals(1, $c->search(0, true));
+        $this->assertEquals(2, $c->search(1, true));
+        $this->assertEquals(3, $c->search([], true));
+        $this->assertEquals(4, $c->search('', true));
     }
 
     public function testSearchReturnsFalseWhenItemIsNotFound()
@@ -2099,6 +2221,14 @@ class SupportCollectionTest extends TestCase
 
         $c = new Collection([1, 2, 3, 4, 5]);
         $c = $c->pad(4, 0);
+        $this->assertEquals([1, 2, 3, 4, 5], $c->all());
+
+        $c = new Collection([1, 2, 3]);
+        $c = $c->pad(-4, 0);
+        $this->assertEquals([0, 1, 2, 3], $c->all());
+
+        $c = new Collection([1, 2, 3, 4, 5]);
+        $c = $c->pad(-4, 0);
         $this->assertEquals([1, 2, 3, 4, 5], $c->all());
     }
 
@@ -2299,11 +2429,10 @@ class SupportCollectionTest extends TestCase
         }));
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     */
     public function testRandomThrowsAnExceptionUsingAmountBiggerThanCollectionSize()
     {
+        $this->expectException(InvalidArgumentException::class);
+
         $data = new Collection([1, 2, 3]);
         $data->random(4);
     }

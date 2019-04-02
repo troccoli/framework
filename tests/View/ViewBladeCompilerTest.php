@@ -3,13 +3,14 @@
 namespace Illuminate\Tests\View;
 
 use Mockery as m;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\View\Compilers\BladeCompiler;
 
 class ViewBladeCompilerTest extends TestCase
 {
-    public function tearDown()
+    protected function tearDown(): void
     {
         m::close();
     }
@@ -21,12 +22,11 @@ class ViewBladeCompilerTest extends TestCase
         $this->assertTrue($compiler->isExpired('foo'));
     }
 
-    /**
-     * @expectedException \InvalidArgumentException
-     * @expectedExceptionMessage Please provide a valid cache path.
-     */
     public function testCannotConstructWithBadCachePath()
     {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Please provide a valid cache path.');
+
         new BladeCompiler($this->getFiles(), null);
     }
 
@@ -49,7 +49,7 @@ class ViewBladeCompilerTest extends TestCase
     {
         $compiler = new BladeCompiler($files = $this->getFiles(), __DIR__);
         $files->shouldReceive('get')->once()->with('foo')->andReturn('Hello World');
-        $files->shouldReceive('put')->once()->with(__DIR__.'/'.sha1('foo').'.php', 'Hello World');
+        $files->shouldReceive('put')->once()->with(__DIR__.'/'.sha1('foo').'.php', "Hello World\n<?php /* foo */ ?>");
         $compiler->compile('foo');
     }
 
@@ -57,7 +57,7 @@ class ViewBladeCompilerTest extends TestCase
     {
         $compiler = new BladeCompiler($files = $this->getFiles(), __DIR__);
         $files->shouldReceive('get')->once()->with('foo')->andReturn('Hello World');
-        $files->shouldReceive('put')->once()->with(__DIR__.'/'.sha1('foo').'.php', 'Hello World');
+        $files->shouldReceive('put')->once()->with(__DIR__.'/'.sha1('foo').'.php', "Hello World\n<?php /* foo */ ?>");
         $compiler->compile('foo');
         $this->assertEquals('foo', $compiler->getPath());
     }
@@ -73,7 +73,7 @@ class ViewBladeCompilerTest extends TestCase
     {
         $compiler = new BladeCompiler($files = $this->getFiles(), __DIR__);
         $files->shouldReceive('get')->once()->with('foo')->andReturn('Hello World');
-        $files->shouldReceive('put')->once()->with(__DIR__.'/'.sha1('foo').'.php', 'Hello World');
+        $files->shouldReceive('put')->once()->with(__DIR__.'/'.sha1('foo').'.php', "Hello World\n<?php /* foo */ ?>");
         // set path before compilation
         $compiler->setPath('foo');
         // trigger compilation with null $path
@@ -91,6 +91,22 @@ class ViewBladeCompilerTest extends TestCase
         $this->assertEquals('<?php echo $name; ?>', $compiler->compileString('{{
             $name
         }}'));
+    }
+
+    public function testIncludePathToTemplate()
+    {
+        $compiler = new BladeCompiler($files = $this->getFiles(), __DIR__);
+        $files->shouldReceive('get')->once()->with('foo')->andReturn('Hello World');
+        $files->shouldReceive('put')->once()->with(__DIR__.'/'.sha1('foo').'.php', "Hello World\n<?php /* foo */ ?>");
+        $compiler->compile('foo');
+    }
+
+    public function testShouldStartFromStrictTypesDeclaration()
+    {
+        $compiler = new BladeCompiler($files = $this->getFiles(), __DIR__);
+        $strictTypeDecl = "<?php\ndeclare(strict_types = 1);";
+        $this->assertTrue(substr($compiler->compileString("<?php\ndeclare(strict_types = 1);\nHello World"),
+            0, strlen($strictTypeDecl)) === $strictTypeDecl);
     }
 
     protected function getFiles()

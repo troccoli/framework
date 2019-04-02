@@ -10,7 +10,7 @@ use Illuminate\Database\Schema\Grammars\SqlServerGrammar;
 
 class DatabaseSqlServerSchemaGrammarTest extends TestCase
 {
-    public function tearDown()
+    protected function tearDown(): void
     {
         m::close();
     }
@@ -233,7 +233,14 @@ class DatabaseSqlServerSchemaGrammarTest extends TestCase
         $statements = $blueprint->toSql($this->getConnection(), $this->getGrammar());
 
         $this->assertCount(1, $statements);
-        $this->assertEquals('create unique index "bar" on "users" ("foo")', $statements[0]);
+        $this->assertEquals('create unique index "bar" on "users" ("foo") where "foo" is not null', $statements[0]);
+
+        $blueprint = new Blueprint('users');
+        $blueprint->unique(['foo', 'bar'], 'baz');
+        $statements = $blueprint->toSql($this->getConnection(), $this->getGrammar());
+
+        $this->assertCount(1, $statements);
+        $this->assertEquals('create unique index "baz" on "users" ("foo", "bar") where "foo" is not null and "bar" is not null', $statements[0]);
     }
 
     public function testAddingIndex()
@@ -768,6 +775,17 @@ class DatabaseSqlServerSchemaGrammarTest extends TestCase
 
         $this->assertCount(1, $statements);
         $this->assertEquals('alter table "geo" add "coordinates" geography not null', $statements[0]);
+    }
+
+    public function testAddingGeneratedColumn()
+    {
+        $blueprint = new Blueprint('products');
+        $blueprint->integer('price');
+        $blueprint->computed('discounted_virtual', 'price - 5');
+        $blueprint->computed('discounted_stored', 'price - 5')->persisted();
+        $statements = $blueprint->toSql($this->getConnection(), $this->getGrammar());
+        $this->assertCount(1, $statements);
+        $this->assertEquals('alter table "products" add "price" int not null, "discounted_virtual" as (price - 5), "discounted_stored" as (price - 5) persisted', $statements[0]);
     }
 
     public function testGrammarsAreMacroable()

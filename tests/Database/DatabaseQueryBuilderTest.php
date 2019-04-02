@@ -4,6 +4,8 @@ namespace Illuminate\Tests\Database;
 
 use stdClass;
 use Mockery as m;
+use RuntimeException;
+use BadMethodCallException;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Illuminate\Database\Query\Builder;
@@ -22,7 +24,7 @@ use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 
 class DatabaseQueryBuilderTest extends TestCase
 {
-    public function tearDown()
+    protected function tearDown(): void
     {
         m::close();
     }
@@ -778,6 +780,13 @@ class DatabaseQueryBuilderTest extends TestCase
         $this->assertEquals($expectedSql, $builder->toSql());
         $this->assertEquals([0 => 10, 1 => 1, 2 => 11, 3 => 2], $builder->getBindings());
 
+        $builder = $this->getPostgresBuilder();
+        $expectedSql = '(select "name" from "users" where "id" = ?) union (select "name" from "users" where "id" = ?)';
+        $builder->select('name')->from('users')->where('id', '=', 1);
+        $builder->union($this->getPostgresBuilder()->select('name')->from('users')->where('id', '=', 2));
+        $this->assertEquals($expectedSql, $builder->toSql());
+        $this->assertEquals([0 => 1, 1 => 2], $builder->getBindings());
+
         $builder = $this->getSQLiteBuilder();
         $expectedSql = 'select * from (select "name" from "users" where "id" = ?) union select * from (select "name" from "users" where "id" = ?)';
         $builder->select('name')->from('users')->where('id', '=', 1);
@@ -792,6 +801,13 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder->select('*')->from('users')->where('id', '=', 1);
         $builder->unionAll($this->getBuilder()->select('*')->from('users')->where('id', '=', 2));
         $this->assertEquals('select * from "users" where "id" = ? union all select * from "users" where "id" = ?', $builder->toSql());
+        $this->assertEquals([0 => 1, 1 => 2], $builder->getBindings());
+
+        $expectedSql = '(select * from "users" where "id" = ?) union all (select * from "users" where "id" = ?)';
+        $builder = $this->getPostgresBuilder();
+        $builder->select('*')->from('users')->where('id', '=', 1);
+        $builder->unionAll($this->getBuilder()->select('*')->from('users')->where('id', '=', 2));
+        $this->assertEquals($expectedSql, $builder->toSql());
         $this->assertEquals([0 => 1, 1 => 2], $builder->getBindings());
     }
 
@@ -832,6 +848,20 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder->union($this->getBuilder()->select('*')->from('dogs'));
         $builder->skip(5)->take(10);
         $this->assertEquals('select * from "users" union select * from "dogs" limit 10 offset 5', $builder->toSql());
+
+        $expectedSql = '(select * from "users") union (select * from "dogs") limit 10 offset 5';
+        $builder = $this->getPostgresBuilder();
+        $builder->select('*')->from('users');
+        $builder->union($this->getBuilder()->select('*')->from('dogs'));
+        $builder->skip(5)->take(10);
+        $this->assertEquals($expectedSql, $builder->toSql());
+
+        $expectedSql = '(select * from "users" limit 11) union (select * from "dogs" limit 22) limit 10 offset 5';
+        $builder = $this->getPostgresBuilder();
+        $builder->select('*')->from('users')->limit(11);
+        $builder->union($this->getBuilder()->select('*')->from('dogs')->limit(22));
+        $builder->skip(5)->take(10);
+        $this->assertEquals($expectedSql, $builder->toSql());
     }
 
     public function testUnionWithJoin()
@@ -879,7 +909,7 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder->getProcessor()->shouldReceive('processSelect')->once();
         $builder->from('posts')->select('id')->union($this->getMySqlBuilder()->from('videos')->select('id'))->count();
 
-        $expected = 'select count(*) as aggregate from (select * from "posts" union select * from "videos") as "temp_table"';
+        $expected = 'select count(*) as aggregate from ((select * from "posts") union (select * from "videos")) as "temp_table"';
         $builder = $this->getPostgresBuilder();
         $builder->getConnection()->shouldReceive('select')->once()->with($expected, [], true);
         $builder->getProcessor()->shouldReceive('processSelect')->once();
@@ -980,6 +1010,14 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder = $this->getBuilder();
         $builder->select('*')->from('users')->orderByDesc('name');
         $this->assertEquals('select * from "users" order by "name" desc', $builder->toSql());
+    }
+
+    public function testOrderByInvalidDirectionParam()
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $builder = $this->getBuilder();
+        $builder->select('*')->from('users')->orderBy('age', 'asec');
     }
 
     public function testHavings()
@@ -1965,6 +2003,21 @@ class DatabaseQueryBuilderTest extends TestCase
         $this->assertTrue($builder->updateOrInsert(['email' => 'foo'], ['name' => 'bar']));
     }
 
+    public function testUpdateOrInsertMethodWorksWithEmptyUpdateValues()
+    {
+        $builder = m::spy(Builder::class.'[where,exists,update]', [
+            m::mock(ConnectionInterface::class),
+            new Grammar,
+            m::mock(Processor::class),
+        ]);
+
+        $builder->shouldReceive('where')->once()->with(['email' => 'foo'])->andReturn(m::self());
+        $builder->shouldReceive('exists')->once()->andReturn(true);
+
+        $this->assertTrue($builder->updateOrInsert(['email' => 'foo']));
+        $builder->shouldNotHaveReceived('update');
+    }
+
     public function testDeleteMethod()
     {
         $builder = $this->getBuilder();
@@ -2185,14 +2238,18 @@ class DatabaseQueryBuilderTest extends TestCase
     {
         $builder = $this->getMySqlBuilder();
         $builder->select('*')->from('users')->where('items->available', '=', true);
-        $this->assertEquals('select * from `users` where json_unquote(json_extract(`items`, \'$."available"\')) = true', $builder->toSql());
+        $this->assertEquals('select * from `users` where json_extract(`items`, \'$."available"\') = true', $builder->toSql());
+
+        $builder = $this->getMySqlBuilder();
+        $builder->select('*')->from('users')->where(new Raw("items->'$.available'"), '=', true);
+        $this->assertEquals("select * from `users` where items->'$.available' = true", $builder->toSql());
     }
 
     public function testMySqlWrappingJsonWithBooleanAndIntegerThatLooksLikeOne()
     {
         $builder = $this->getMySqlBuilder();
         $builder->select('*')->from('users')->where('items->available', '=', true)->where('items->active', '=', false)->where('items->number_available', '=', 0);
-        $this->assertEquals('select * from `users` where json_unquote(json_extract(`items`, \'$."available"\')) = true and json_unquote(json_extract(`items`, \'$."active"\')) = false and json_unquote(json_extract(`items`, \'$."number_available"\')) = ?', $builder->toSql());
+        $this->assertEquals('select * from `users` where json_extract(`items`, \'$."available"\') = true and json_extract(`items`, \'$."active"\') = false and json_unquote(json_extract(`items`, \'$."number_available"\')) = ?', $builder->toSql());
     }
 
     public function testMySqlWrappingJson()
@@ -2227,6 +2284,10 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder = $this->getPostgresBuilder();
         $builder->select('*')->from('users')->where('items->price->in_usd', '=', 1)->where('items->age', '=', 2);
         $this->assertEquals('select * from "users" where "items"->\'price\'->>\'in_usd\' = ? and "items"->>\'age\' = ?', $builder->toSql());
+
+        $builder = $this->getPostgresBuilder();
+        $builder->select('*')->from('users')->where('items->available', '=', true);
+        $this->assertEquals('select * from "users" where ("items"->\'available\')::jsonb = \'true\'::jsonb', $builder->toSql());
     }
 
     public function testSqlServerWrappingJson()
@@ -2242,6 +2303,10 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder = $this->getSqlServerBuilder();
         $builder->select('*')->from('users')->where('items->price->in_usd', '=', 1)->where('items->age', '=', 2);
         $this->assertEquals('select * from [users] where json_value([items], \'$."price"."in_usd"\') = ? and json_value([items], \'$."age"\') = ?', $builder->toSql());
+
+        $builder = $this->getSqlServerBuilder();
+        $builder->select('*')->from('users')->where('items->available', '=', true);
+        $this->assertEquals('select * from [users] where json_value([items], \'$."available"\') = \'true\'', $builder->toSql());
     }
 
     public function testSqliteWrappingJson()
@@ -2257,6 +2322,10 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder = $this->getSQLiteBuilder();
         $builder->select('*')->from('users')->where('items->price->in_usd', '=', 1)->where('items->age', '=', 2);
         $this->assertEquals('select * from "users" where json_extract("items", \'$."price"."in_usd"\') = ? and json_extract("items", \'$."age"\') = ?', $builder->toSql());
+
+        $builder = $this->getSQLiteBuilder();
+        $builder->select('*')->from('users')->where('items->available', '=', true);
+        $this->assertEquals('select * from "users" where json_extract("items", \'$."available"\') = true', $builder->toSql());
     }
 
     public function testSQLiteOrderBy()
@@ -2355,11 +2424,10 @@ class DatabaseQueryBuilderTest extends TestCase
         $this->assertCount(2, $builder->wheres);
     }
 
-    /**
-     * @expectedException \BadMethodCallException
-     */
     public function testBuilderThrowsExpectedExceptionWithUndefinedMethod()
     {
+        $this->expectException(BadMethodCallException::class);
+
         $builder = $this->getBuilder();
         $builder->getConnection()->shouldReceive('select');
         $builder->getProcessor()->shouldReceive('processSelect')->andReturn([]);
@@ -2866,11 +2934,10 @@ class DatabaseQueryBuilderTest extends TestCase
         $this->assertEquals([1], $builder->getBindings());
     }
 
-    /**
-     * @expectedException \RuntimeException
-     */
     public function testWhereJsonContainsSqlite()
     {
+        $this->expectException(RuntimeException::class);
+
         $builder = $this->getSQLiteBuilder();
         $builder->select('*')->from('users')->whereJsonContains('options->languages', ['en'])->toSql();
     }
@@ -2919,11 +2986,10 @@ class DatabaseQueryBuilderTest extends TestCase
         $this->assertEquals([1], $builder->getBindings());
     }
 
-    /**
-     * @expectedException \RuntimeException
-     */
     public function testWhereJsonDoesntContainSqlite()
     {
+        $this->expectException(RuntimeException::class);
+
         $builder = $this->getSQLiteBuilder();
         $builder->select('*')->from('users')->whereJsonDoesntContain('options->languages', ['en'])->toSql();
     }
