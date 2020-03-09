@@ -2,14 +2,15 @@
 
 namespace Illuminate\Tests\Queue;
 
-use Mockery as m;
-use Illuminate\Support\Carbon;
-use PHPUnit\Framework\TestCase;
-use Illuminate\Queue\RedisQueue;
 use Illuminate\Container\Container;
-use Illuminate\Queue\Jobs\RedisJob;
-use Illuminate\Support\InteractsWithTime;
 use Illuminate\Foundation\Testing\Concerns\InteractsWithRedis;
+use Illuminate\Queue\Jobs\RedisJob;
+use Illuminate\Queue\RedisQueue;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\InteractsWithTime;
+use Illuminate\Support\Str;
+use Mockery as m;
+use PHPUnit\Framework\TestCase;
 
 class RedisQueueIntegrationTest extends TestCase
 {
@@ -68,7 +69,7 @@ class RedisQueueIntegrationTest extends TestCase
     /**
      * @dataProvider redisDriverProvider
      *
-     * @param $driver
+     * @param  mixed  $driver
      *
      * @throws \Exception
      */
@@ -81,7 +82,7 @@ class RedisQueueIntegrationTest extends TestCase
             $this->assertEquals(12, unserialize(json_decode($this->queue->pop()->getRawBody())->data->command)->i);
         } elseif ($pid == 0) {
             $this->setUpRedis();
-            $this->setQueue('predis');
+            $this->setQueue('phpredis');
             sleep(1);
             $this->queue->push(new RedisQueueIntegrationTestJob(12));
             die;
@@ -226,6 +227,10 @@ class RedisQueueIntegrationTest extends TestCase
      */
     public function testBlockingPopProperlyPopsExpiredJobs($driver)
     {
+        Str::createUuidsUsing(function () {
+            return 'uuid';
+        });
+
         $this->setQueue($driver, 'default', null, 60, 5);
 
         $jobs = [
@@ -242,6 +247,8 @@ class RedisQueueIntegrationTest extends TestCase
         $this->assertEquals(0, $this->redis[$driver]->connection()->llen('queues:default:notify'));
         $this->assertEquals(0, $this->redis[$driver]->connection()->zcard('queues:default:delayed'));
         $this->assertEquals(2, $this->redis[$driver]->connection()->zcard('queues:default:reserved'));
+
+        Str::createUuidsNormally();
     }
 
     /**
