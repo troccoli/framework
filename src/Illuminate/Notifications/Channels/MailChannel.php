@@ -2,13 +2,12 @@
 
 namespace Illuminate\Notifications\Channels;
 
+use Illuminate\Collections\Arr;
 use Illuminate\Contracts\Mail\Factory as MailFactory;
 use Illuminate\Contracts\Mail\Mailable;
-use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Markdown;
 use Illuminate\Notifications\Notification;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 
 class MailChannel

@@ -6,7 +6,7 @@ use ArrayObject;
 use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Contracts\Support\Jsonable;
 use Illuminate\Contracts\Support\Renderable;
-use Illuminate\Support\Traits\Macroable;
+use Illuminate\Macroable\Macroable;
 use JsonSerializable;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\ResponseHeaderBag;
@@ -18,10 +18,10 @@ class Response extends SymfonyResponse
     }
 
     /**
-     * Create a new HTTP reponse.
+     * Create a new HTTP response.
      *
      * @param  mixed  $content
-     * @param  int   $status
+     * @param  int  $status
      * @param  array  $headers
      * @return void
      *

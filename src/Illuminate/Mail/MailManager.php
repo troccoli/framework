@@ -5,14 +5,13 @@ namespace Illuminate\Mail;
 use Aws\Ses\SesClient;
 use Closure;
 use GuzzleHttp\Client as HttpClient;
+use Illuminate\Collections\Arr;
 use Illuminate\Contracts\Mail\Factory as FactoryContract;
 use Illuminate\Log\LogManager;
 use Illuminate\Mail\Transport\ArrayTransport;
 use Illuminate\Mail\Transport\LogTransport;
 use Illuminate\Mail\Transport\MailgunTransport;
 use Illuminate\Mail\Transport\SesTransport;
-use Illuminate\Support\Arr;
-use Illuminate\Support\Manager;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Postmark\ThrowExceptionOnFailurePlugin;
@@ -228,6 +227,10 @@ class MailManager implements FactoryContract
 
         if (isset($config['local_domain'])) {
             $transport->setLocalDomain($config['local_domain']);
+        }
+
+        if (isset($config['timeout'])) {
+            $transport->setTimeout($config['timeout']);
         }
 
         return $transport;

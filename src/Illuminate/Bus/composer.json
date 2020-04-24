@@ -15,6 +15,7 @@
     ],
     "require": {
         "php": "^7.3",
+        "illuminate/collections": "^8.0",
         "illuminate/contracts": "^8.0",
         "illuminate/pipeline": "^8.0",
         "illuminate/support": "^8.0"
@@ -28,6 +29,9 @@
         "branch-alias": {
             "dev-master": "8.x-dev"
         }
+    },
+    "suggest": {
+        "illuminate/queue": "Required to use closures when chaining jobs (^7.0)"
     },
     "config": {
         "sort-packages": true

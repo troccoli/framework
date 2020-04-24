@@ -73,6 +73,9 @@ class SupportStrTest extends TestCase
         $this->assertTrue(Str::startsWith('Malmö', 'Malmö'));
         $this->assertFalse(Str::startsWith('Jönköping', 'Jonko'));
         $this->assertFalse(Str::startsWith('Malmö', 'Malmo'));
+        $this->assertTrue(Str::startsWith('你好', '你'));
+        $this->assertFalse(Str::startsWith('你好', '好'));
+        $this->assertFalse(Str::startsWith('你好', 'a'));
     }
 
     public function testEndsWith()
@@ -100,6 +103,9 @@ class SupportStrTest extends TestCase
         $this->assertTrue(Str::endsWith('Malmö', 'mö'));
         $this->assertFalse(Str::endsWith('Jönköping', 'oping'));
         $this->assertFalse(Str::endsWith('Malmö', 'mo'));
+        $this->assertTrue(Str::endsWith('你好', '好'));
+        $this->assertFalse(Str::endsWith('你好', '你'));
+        $this->assertFalse(Str::endsWith('你好', 'a'));
     }
 
     public function testStrBefore()
@@ -253,7 +259,7 @@ class SupportStrTest extends TestCase
         $this->assertTrue(Str::is('foo/bar/baz', $valueObject));
         $this->assertTrue(Str::is($patternObject, $valueObject));
 
-        //empty patterns
+        // empty patterns
         $this->assertFalse(Str::is([], 'test'));
     }
 
@@ -416,6 +422,20 @@ class SupportStrTest extends TestCase
         $this->assertSame('БГДЖ', Str::substr('БГДЖИЛЁ', 0, 4));
         $this->assertSame('Ё', Str::substr('БГДЖИЛЁ', -1, 1));
         $this->assertEmpty(Str::substr('Б', 2));
+    }
+
+    public function testSubstrCount()
+    {
+        $this->assertSame(3, Str::substrCount('laravelPHPFramework', 'a'));
+        $this->assertSame(0, Str::substrCount('laravelPHPFramework', 'z'));
+        $this->assertSame(1, Str::substrCount('laravelPHPFramework', 'l', 2));
+        $this->assertSame(0, Str::substrCount('laravelPHPFramework', 'z', 2));
+        $this->assertSame(1, Str::substrCount('laravelPHPFramework', 'k', -1));
+        $this->assertSame(1, Str::substrCount('laravelPHPFramework', 'k', -1));
+        $this->assertSame(1, Str::substrCount('laravelPHPFramework', 'a', 1, 2));
+        $this->assertSame(1, Str::substrCount('laravelPHPFramework', 'a', 1, 2));
+        $this->assertSame(3, Str::substrCount('laravelPHPFramework', 'a', 1, -2));
+        $this->assertSame(1, Str::substrCount('laravelPHPFramework', 'a', -10, -3));
     }
 
     public function testUcfirst()
