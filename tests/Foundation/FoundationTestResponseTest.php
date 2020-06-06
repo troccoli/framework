@@ -523,6 +523,22 @@ class FoundationTestResponseTest extends TestCase
         $testResponse->assertJsonValidationErrors(['one' => 'foo', 'two' => 'bar']);
     }
 
+    public function testAssertJsonValidationErrorMessagesMultipleMessagesCanFail()
+    {
+        $this->expectException(AssertionFailedError::class);
+
+        $data = [
+            'status' => 'ok',
+            'errors' => ['one' => 'foo', 'two' => 'bar'],
+        ];
+
+        $testResponse = TestResponse::fromBaseResponse(
+            (new Response)->setContent(json_encode($data))
+        );
+
+        $testResponse->assertJsonValidationErrors(['one' => 'foo', 'three' => 'baz']);
+    }
+
     public function testAssertJsonValidationErrorMessagesMixed()
     {
         $data = [
@@ -557,10 +573,9 @@ class FoundationTestResponseTest extends TestCase
     {
         $baseResponse = tap(new Response, function ($response) {
             $response->setContent(json_encode(['errors' => [
-                    'foo' => [],
-                    'bar' => ['one', 'two'],
-                ]]
-            ));
+                'foo' => [],
+                'bar' => ['one', 'two'],
+            ]]));
         });
 
         $response = TestResponse::fromBaseResponse($baseResponse);
@@ -581,10 +596,9 @@ class FoundationTestResponseTest extends TestCase
 
         $baseResponse = tap(new Response, function ($response) {
             $response->setContent(json_encode(['errors' => [
-                    'foo' => [],
-                    'bar' => ['one', 'two'],
-                ]]
-            ));
+                'foo' => [],
+                'bar' => ['one', 'two'],
+            ]]));
         });
 
         $response = TestResponse::fromBaseResponse($baseResponse);
@@ -598,10 +612,9 @@ class FoundationTestResponseTest extends TestCase
 
         $baseResponse = tap(new Response, function ($response) {
             $response->setContent(json_encode(['errors' => [
-                    'foo' => [],
-                    'bar' => ['one', 'two'],
-                ]]
-            ));
+                'foo' => [],
+                'bar' => ['one', 'two'],
+            ]]));
         });
 
         $response = TestResponse::fromBaseResponse($baseResponse);
