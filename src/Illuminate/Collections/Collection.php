@@ -134,7 +134,7 @@ class Collection implements ArrayAccess, Enumerable
 
         $collection = isset($key) ? $this->pluck($key) : $this;
 
-        $counts = new self;
+        $counts = new static;
 
         $collection->each(function ($value) use ($counts) {
             $counts[$value] = isset($counts[$value]) ? $counts[$value] + 1 : 1;
@@ -975,6 +975,28 @@ class Collection implements ArrayAccess, Enumerable
     public function skip($count)
     {
         return $this->slice($count);
+    }
+
+    /**
+     * Skip items in the collection until the given condition is met.
+     *
+     * @param  mixed  $value
+     * @return static
+     */
+    public function skipUntil($value)
+    {
+        return new static($this->lazy()->skipUntil($value)->all());
+    }
+
+    /**
+     * Skip items in the collection while the given condition is met.
+     *
+     * @param  mixed  $value
+     * @return static
+     */
+    public function skipWhile($value)
+    {
+        return new static($this->lazy()->skipWhile($value)->all());
     }
 
     /**

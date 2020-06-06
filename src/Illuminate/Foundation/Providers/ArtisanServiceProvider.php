@@ -14,6 +14,7 @@ use Illuminate\Database\Console\Factories\FactoryMakeCommand;
 use Illuminate\Database\Console\Seeds\SeedCommand;
 use Illuminate\Database\Console\Seeds\SeederMakeCommand;
 use Illuminate\Database\Console\WipeCommand;
+use Illuminate\Foundation\Console\CastMakeCommand;
 use Illuminate\Foundation\Console\ChannelMakeCommand;
 use Illuminate\Foundation\Console\ClearCompiledCommand;
 use Illuminate\Foundation\Console\ComponentMakeCommand;
@@ -55,12 +56,14 @@ use Illuminate\Foundation\Console\VendorPublishCommand;
 use Illuminate\Foundation\Console\ViewCacheCommand;
 use Illuminate\Foundation\Console\ViewClearCommand;
 use Illuminate\Notifications\Console\NotificationTableCommand;
+use Illuminate\Queue\Console\BatchesTableCommand;
 use Illuminate\Queue\Console\FailedTableCommand;
 use Illuminate\Queue\Console\FlushFailedCommand as FlushFailedQueueCommand;
 use Illuminate\Queue\Console\ForgetFailedCommand as ForgetFailedQueueCommand;
 use Illuminate\Queue\Console\ListenCommand as QueueListenCommand;
 use Illuminate\Queue\Console\ListFailedCommand as ListFailedQueueCommand;
 use Illuminate\Queue\Console\RestartCommand as QueueRestartCommand;
+use Illuminate\Queue\Console\RetryBatchCommand as QueueRetryBatchCommand;
 use Illuminate\Queue\Console\RetryCommand as QueueRetryCommand;
 use Illuminate\Queue\Console\TableCommand;
 use Illuminate\Queue\Console\WorkCommand as QueueWorkCommand;
@@ -99,6 +102,7 @@ class ArtisanServiceProvider extends ServiceProvider implements DeferrableProvid
         'QueueListen' => 'command.queue.listen',
         'QueueRestart' => 'command.queue.restart',
         'QueueRetry' => 'command.queue.retry',
+        'QueueRetryBatch' => 'command.queue.retry-batch',
         'QueueWork' => 'command.queue.work',
         'RouteCache' => 'command.route.cache',
         'RouteClear' => 'command.route.clear',
@@ -120,6 +124,7 @@ class ArtisanServiceProvider extends ServiceProvider implements DeferrableProvid
      */
     protected $devCommands = [
         'CacheTable' => 'command.cache.table',
+        'CastMake' => 'command.cast.make',
         'ChannelMake' => 'command.channel.make',
         'ComponentMake' => 'command.component.make',
         'ConsoleMake' => 'command.console.make',
@@ -140,6 +145,7 @@ class ArtisanServiceProvider extends ServiceProvider implements DeferrableProvid
         'ProviderMake' => 'command.provider.make',
         'QueueFailedTable' => 'command.queue.failed-table',
         'QueueTable' => 'command.queue.table',
+        'QueueBatchesTable' => 'command.queue.batches-table',
         'RequestMake' => 'command.request.make',
         'ResourceMake' => 'command.resource.make',
         'RuleMake' => 'command.rule.make',
@@ -211,6 +217,18 @@ class ArtisanServiceProvider extends ServiceProvider implements DeferrableProvid
     {
         $this->app->singleton('command.cache.table', function ($app) {
             return new CacheTableCommand($app['files'], $app['composer']);
+        });
+    }
+
+    /**
+     * Register the command.
+     *
+     * @return void
+     */
+    protected function registerCastMakeCommand()
+    {
+        $this->app->singleton('command.cast.make', function ($app) {
+            return new CastMakeCommand($app['files']);
         });
     }
 
@@ -675,6 +693,18 @@ class ArtisanServiceProvider extends ServiceProvider implements DeferrableProvid
      *
      * @return void
      */
+    protected function registerQueueRetryBatchCommand()
+    {
+        $this->app->singleton('command.queue.retry-batch', function () {
+            return new QueueRetryBatchCommand;
+        });
+    }
+
+    /**
+     * Register the command.
+     *
+     * @return void
+     */
     protected function registerQueueWorkCommand()
     {
         $this->app->singleton('command.queue.work', function ($app) {
@@ -703,6 +733,18 @@ class ArtisanServiceProvider extends ServiceProvider implements DeferrableProvid
     {
         $this->app->singleton('command.queue.table', function ($app) {
             return new TableCommand($app['files'], $app['composer']);
+        });
+    }
+
+    /**
+     * Register the command.
+     *
+     * @return void
+     */
+    protected function registerQueueBatchesTableCommand()
+    {
+        $this->app->singleton('command.queue.batches-table', function ($app) {
+            return new BatchesTableCommand($app['files'], $app['composer']);
         });
     }
 

@@ -176,8 +176,8 @@ abstract class ServiceProvider
     protected function loadViewComponentsAs($prefix, array $components)
     {
         $this->callAfterResolving(BladeCompiler::class, function ($blade) use ($prefix, $components) {
-            foreach ($components as $component) {
-                $blade->component($component, null, $prefix);
+            foreach ($components as $alias => $component) {
+                $blade->component($component, is_string($alias) ? $alias : null, $prefix);
             }
         });
     }
@@ -226,6 +226,8 @@ abstract class ServiceProvider
 
     /**
      * Register Eloquent model factory paths.
+     *
+     * @deprecated Will be removed in a future Laravel version.
      *
      * @param  array|string  $paths
      * @return void

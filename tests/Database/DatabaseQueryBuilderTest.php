@@ -756,12 +756,28 @@ class DatabaseQueryBuilderTest extends TestCase
         $this->assertEquals([], $builder->getBindings());
     }
 
+    public function testOrWhereIntegerInRaw()
+    {
+        $builder = $this->getBuilder();
+        $builder->select('*')->from('users')->where('id', '=', 1)->orWhereIntegerInRaw('id', ['1a', 2]);
+        $this->assertSame('select * from "users" where "id" = ? or "id" in (1, 2)', $builder->toSql());
+        $this->assertEquals([0 => 1], $builder->getBindings());
+    }
+
     public function testWhereIntegerNotInRaw()
     {
         $builder = $this->getBuilder();
         $builder->select('*')->from('users')->whereIntegerNotInRaw('id', ['1a', 2]);
         $this->assertSame('select * from "users" where "id" not in (1, 2)', $builder->toSql());
         $this->assertEquals([], $builder->getBindings());
+    }
+
+    public function testOrWhereIntegerNotInRaw()
+    {
+        $builder = $this->getBuilder();
+        $builder->select('*')->from('users')->where('id', '=', 1)->orWhereIntegerNotInRaw('id', ['1a', 2]);
+        $this->assertSame('select * from "users" where "id" = ? or "id" not in (1, 2)', $builder->toSql());
+        $this->assertEquals([0 => 1], $builder->getBindings());
     }
 
     public function testEmptyWhereIntegerInRaw()
@@ -2355,6 +2371,11 @@ class DatabaseQueryBuilderTest extends TestCase
         $builder->getConnection()->shouldReceive('delete')->once()->with('delete from [users] where [email] = ?', ['foo'])->andReturn(1);
         $result = $builder->from('users')->where('email', '=', 'foo')->delete();
         $this->assertEquals(1, $result);
+
+        $builder = $this->getSqlServerBuilder();
+        $builder->getConnection()->shouldReceive('delete')->once()->with('delete top (1) from [users] where [email] = ?', ['foo'])->andReturn(1);
+        $result = $builder->from('users')->where('email', '=', 'foo')->orderBy('id')->take(1)->delete();
+        $this->assertEquals(1, $result);
     }
 
     public function testDeleteWithJoinMethod()
@@ -3022,6 +3043,22 @@ SQL;
         $this->expectException(InvalidArgumentException::class);
         $builder = $this->getPostgresBuilder();
         $builder->selectSub(['foo'], 'sub');
+    }
+
+    public function testSubSelectResetBindings()
+    {
+        $builder = $this->getPostgresBuilder();
+        $builder->from('one')->selectSub(function ($query) {
+            $query->from('two')->select('baz')->where('subkey', '=', 'subval');
+        }, 'sub');
+
+        $this->assertEquals('select (select "baz" from "two" where "subkey" = ?) as "sub" from "one"', $builder->toSql());
+        $this->assertEquals(['subval'], $builder->getBindings());
+
+        $builder->select('*');
+
+        $this->assertEquals('select * from "one"', $builder->toSql());
+        $this->assertEquals([], $builder->getBindings());
     }
 
     public function testSqlServerWhereDate()
