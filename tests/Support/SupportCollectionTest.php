@@ -215,6 +215,42 @@ class SupportCollectionTest extends TestCase
     /**
      * @dataProvider collectionClassProvider
      */
+    public function testSkipUntil($collection)
+    {
+        $data = new $collection([1, 1, 2, 2, 3, 3, 4, 4]);
+
+        $data = $data->skipUntil(3)->values();
+
+        $this->assertSame([3, 3, 4, 4], $data->all());
+
+        $data = $data->skipUntil(function ($value, $key) {
+            return $value > 3;
+        })->values();
+
+        $this->assertSame([4, 4], $data->all());
+    }
+
+    /**
+     * @dataProvider collectionClassProvider
+     */
+    public function testSkipWhile($collection)
+    {
+        $data = new $collection([1, 1, 2, 2, 3, 3, 4, 4]);
+
+        $data = $data->skipWhile(1)->values();
+
+        $this->assertSame([2, 2, 3, 3, 4, 4], $data->all());
+
+        $data = $data->skipWhile(function ($value, $key) {
+            return $value < 3;
+        })->values();
+
+        $this->assertSame([3, 3, 4, 4], $data->all());
+    }
+
+    /**
+     * @dataProvider collectionClassProvider
+     */
     public function testGetArrayableItems($collection)
     {
         $data = new $collection;
@@ -364,10 +400,13 @@ class SupportCollectionTest extends TestCase
         $c = new Collection(['foo', 'bar']);
         $c = $c->forget(0)->all();
         $this->assertFalse(isset($c['foo']));
+        $this->assertFalse(isset($c[0]));
+        $this->assertTrue(isset($c[1]));
 
         $c = new Collection(['foo' => 'bar', 'baz' => 'qux']);
         $c = $c->forget('foo')->all();
         $this->assertFalse(isset($c['foo']));
+        $this->assertTrue(isset($c['baz']));
     }
 
     public function testForgetArrayOfKeys()
@@ -2436,7 +2475,7 @@ class SupportCollectionTest extends TestCase
 
     public function sortByUrl(array $value)
     {
-        return $value['rating'];
+        return $value['url'];
     }
 
     /**
